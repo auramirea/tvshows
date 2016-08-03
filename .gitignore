@@ -1,0 +1,7 @@
+.idea
+*.iml
+bin
+out
+pkg
+*~
+dependency-reduced-pom.xml
