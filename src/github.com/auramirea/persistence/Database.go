@@ -4,13 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
-
 	_ "github.com/lib/pq"
-	"github.com/mattes/migrate/migrate"
 	 _ "github.com/mattes/migrate/driver/postgres"
 )
-type DbMigration struct {
-}
 
 const (
 	DB_USER     = "vagrant"
@@ -19,23 +15,16 @@ const (
 	HOST        = "192.168.10.11"
 )
 
-func (dbMigration *DbMigration) RunDBMigrations() {
-	// use synchronous versions of migration functions ...
-	err, ok := migrate.UpSync("postgres://vagrant@192.168.10.11/defaultdb", "db")
-	if !ok {
-		fmt.Println("Oh no ...")
-		// do sth with allErrors slice
-		for e := range err {
-			fmt.Println(e)
-		}
-	}
-}
-
-func OpenDbConnection() {
+func openConnection() (*sql.DB) {
 	dbinfo := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable host=%s",
-		DB_USER, DB_PASSWORD, DB_NAME, HOST)
+	DB_USER, DB_PASSWORD, DB_NAME, HOST)
 	db, err := sql.Open("postgres", dbinfo)
 	checkErr(err)
+	return db
+
+}
+func OpenDbConnection() {
+	db := openConnection()
 	defer db.Close()
 
 	fmt.Println("# Inserting values")
