@@ -3,6 +3,7 @@ package persistence
 import (
 	"github.com/mattes/migrate/migrate"
 	"fmt"
+	_ "github.com/mattes/migrate/driver/postgres"
 )
 type DbMigration struct {
 }
@@ -14,22 +15,14 @@ func (dbMigration *DbMigration) MigrationsUp() {
 	// use synchronous versions of migration functions ...
 	err, ok := migrate.UpSync(DB_URL, MIGRATIONS_PATH)
 	if !ok {
-		fmt.Println("Oh no ...")
-		// do sth with allErrors slice
-		for e := range err {
-			fmt.Println(e)
-		}
+		fmt.Println("Up sync error...", err, ok)
 	}
 }
 
 func (dbMigration *DbMigration) MigrationsDown() {
 	err, ok := migrate.DownSync(DB_URL, MIGRATIONS_PATH)
 	if !ok {
-		fmt.Println("Down sync error ...")
-		// do sth with allErrors slice
-		for e := range err {
-			fmt.Println(e)
-		}
+		fmt.Println("Down sync error ...", err, ok)
 	}
 }
 

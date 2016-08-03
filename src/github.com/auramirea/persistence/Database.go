@@ -1,81 +1,46 @@
 package persistence
 
 import (
-	"database/sql"
-	"fmt"
-	"time"
-	_ "github.com/lib/pq"
-	 _ "github.com/mattes/migrate/driver/postgres"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/postgres"
+	"sync"
 )
+type userRepository struct {}
+var instance *userRepository
 
-const (
-	DB_USER     = "vagrant"
-	DB_PASSWORD = "vagrant"
-	DB_NAME     = "defaultdb"
-	HOST        = "192.168.10.11"
-)
+var once sync.Once
+func GetUserRepository() *userRepository {
+	once.Do(func() {
+		instance = &userRepository{}
+	})
+	return instance
+}
 
-func openConnection() (*sql.DB) {
-	dbinfo := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable host=%s",
-	DB_USER, DB_PASSWORD, DB_NAME, HOST)
-	db, err := sql.Open("postgres", dbinfo)
-	checkErr(err)
+type userRepositoryInterface interface {
+	CreateUser(UserEntity) UserEntity
+}
+
+type UserEntity struct {
+	gorm.Model
+	FirstName        string  `gorm:"size:255"` // Default size for string is 255, reset it with this tag
+	LastName         string  `gorm:"size:255"` // Default size for string is 255, reset it with this tag
+	Email            string  `gorm:"size:255"`
+}
+func (UserEntity) TableName() string {
+	return "appuser"
+}
+
+func openConnection() (*gorm.DB) {
+	db, err := gorm.Open("postgres", DB_URL)
+	if err != nil {
+		panic("failed to connect database")
+	}
 	return db
 
 }
-func OpenDbConnection() {
+func (*userRepository) CreateUser(user UserEntity) UserEntity {
 	db := openConnection()
+	db.Create(&user)
 	defer db.Close()
-
-	fmt.Println("# Inserting values")
-
-	var lastInsertId int
-	err = db.QueryRow("INSERT INTO userinfo(username,departname,created) VALUES($1,$2,$3) returning uid;", "astaxie", "研发部门", "2012-12-09").Scan(&lastInsertId)
-	checkErr(err)
-	fmt.Println("last inserted id =", lastInsertId)
-
-	fmt.Println("# Updating")
-	stmt, err := db.Prepare("update userinfo set username=$1 where uid=$2")
-	checkErr(err)
-
-	res, err := stmt.Exec("astaxieupdate", lastInsertId)
-	checkErr(err)
-
-	affect, err := res.RowsAffected()
-	checkErr(err)
-
-	fmt.Println(affect, "rows changed")
-
-	fmt.Println("# Querying")
-	rows, err := db.Query("SELECT * FROM userinfo")
-	checkErr(err)
-
-	for rows.Next() {
-		var uid int
-		var username string
-		var department string
-		var created time.Time
-		err = rows.Scan(&uid, &username, &department, &created)
-		checkErr(err)
-		fmt.Println("uid | username | department | created ")
-		fmt.Printf("%3v | %8v | %6v | %6v\n", uid, username, department, created)
-	}
-
-	fmt.Println("# Deleting")
-	stmt, err = db.Prepare("delete from userinfo where uid=$1")
-	checkErr(err)
-
-	res, err = stmt.Exec(lastInsertId)
-	checkErr(err)
-
-	affect, err = res.RowsAffected()
-	checkErr(err)
-
-	fmt.Println(affect, "rows changed")
-}
-
-func checkErr(err error) {
-	if err != nil {
-		panic(err)
-	}
+	return user
 }
