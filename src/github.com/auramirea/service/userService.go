@@ -18,6 +18,9 @@ func GetUserService() *userService {
 
 type userServiceInterface interface {
 	CreateUser(User) User
+	DeleteUser(string)
+	FindAllUsers() []User
+	FindUser() User
 }
 
 type User struct {
@@ -30,6 +33,23 @@ type User struct {
 func (serviceInstance *userService) CreateUser(user User) User {
 	repo := persistence.GetUserRepository()
 	return convertToUser(repo.CreateUser(convertToUserEntity(user)))
+}
+
+func (serviceInstance *userService) DeleteUser(userId string) {
+	persistence.GetUserRepository().DeleteUser(userId)
+}
+
+func (serviceInstance *userService) FindAllUsers() []User {
+	userEntities := persistence.GetUserRepository().FindAllUsers()
+	users := make([]User, len(userEntities))
+	for i, userEntity := range userEntities {
+		users[i] = convertToUser(userEntity)
+	}
+	return users
+}
+
+func (serviceInstance *userService) FindUser(userId string) User {
+	return convertToUser(persistence.GetUserRepository().FindUser(userId))
 }
 
 func convertToUserEntity(user User) persistence.UserEntity {

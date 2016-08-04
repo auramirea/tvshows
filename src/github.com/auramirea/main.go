@@ -1,85 +1,98 @@
 package main
 
 import (
-	"encoding/json"
-	"github.com/go-kit/kit/endpoint"
-	"golang.org/x/net/context"
 	"net/http"
 	s "github.com/auramirea/service"
-	httptransport "github.com/go-kit/kit/transport/http"
+	"github.com/ant0ine/go-json-rest/rest"
+	"fmt"
+	"strconv"
 	"github.com/auramirea/persistence"
 )
-type listEpisodesRequest struct {
-	S string `json:"showId"`
-}
 
-type listEpisodesResponse struct {
-	V   []s.Episode `json:"episodes"`
-}
+var c = s.NewClient(nil)
+var tvs = s.NewTvService(c)
 
-type searchRequest struct {
-	S string `json:"query"`
-}
-type searchResponse struct {
-	R s.SearchResult `json:"result"`
-}
+type Methods struct {}
 
-func makeListEndpoint(tvs *s.TvService) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(listEpisodesRequest)
-		episodes := tvs.ListEpisodes(req.S)
-
-		return listEpisodesResponse{V: episodes}, nil
+func (api *Methods) ListTvShows(w rest.ResponseWriter, r *rest.Request) {
+	showId := r.URL.Query().Get("showId")
+	if showId == ""{
+		rest.Error(w, "'showId' query parameter required", 400)
+		return
 	}
-}
-func makeSearchEndpoint(tvs *s.TvService) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(searchRequest)
-		params := &s.SearchParams{Query: req.S}
-		result := tvs.Search(params)
-		return searchResponse{R: result}, nil
+	if _, err := strconv.Atoi(showId); err != nil {
+		rest.Error(w, "'showId' must be an int", 400)
+		return
 	}
+	episodes := tvs.ListEpisodes(showId)
+	w.WriteJson(episodes)
 }
-func makeUserEndpoint() endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(s.User)
-		return s.GetUserService().CreateUser(req), nil
+
+func (api *Methods) Search(w rest.ResponseWriter, r *rest.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		rest.Error(w, "'q' query parameter required", 400)
+		return
 	}
+	params := &s.SearchParams{query}
+	result := tvs.Search(params)
+	w.WriteJson(result)
 }
+
+func (api *Methods) CreateUser(w rest.ResponseWriter, r *rest.Request) {
+	user := s.User{}
+	err := r.DecodeJsonPayload(&user)
+	if err != nil {
+		rest.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteJson(s.GetUserService().CreateUser(user))
+}
+
+func (api *Methods) DeleteUser(w rest.ResponseWriter, r *rest.Request) {
+	userId := r.PathParam("userId")
+	if userId == "" {
+		rest.Error(w, "'userId' cannot be empty", http.StatusBadRequest)
+		return
+	}
+	s.GetUserService().DeleteUser(userId)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (api *Methods) GetAllUsers(w rest.ResponseWriter, r *rest.Request) {
+	w.WriteJson(s.GetUserService().FindAllUsers())
+}
+
+func (api *Methods) GetUser(w rest.ResponseWriter, r *rest.Request) {
+	userId := r.PathParam("userId")
+	if userId == "" {
+		rest.Error(w, "'userId' cannot be empty", http.StatusBadRequest)
+		return
+	}
+	w.WriteJson(s.GetUserService().FindUser(userId))
+}
+
 
 func main() {
-	c := s.NewClient(nil)
-	d := &persistence.DbMigration{}
-	d.MigrationsDown()
-	d.MigrationsUp()
-
-	tvs := s.NewTvService(c)
-	ctx := context.Background()
-
-	listHandler := httptransport.NewServer(ctx, makeListEndpoint(tvs), decodeListRequest, encodeResponse)
-	searchHandler := httptransport.NewServer(ctx, makeSearchEndpoint(tvs), decodeSearchRequest, encodeResponse)
-	userHandler := httptransport.NewServer(ctx, makeUserEndpoint(), decodeUserRequest, encodeResponse)
-
-	http.Handle("/list", listHandler)
-	http.Handle("/search", searchHandler)
-	http.Handle("/users", userHandler)
-	http.ListenAndServe(":8080", nil)
-}
-
-func decodeUserRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var request s.User
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		return nil, err
+	dbMigration := persistence.DbMigration{}
+	//dbMigration.MigrationsDown()
+	dbMigration.MigrationsUp()
+	methods := Methods{}
+	api := rest.NewApi()
+	api.Use(rest.DefaultDevStack...)
+	router, err := rest.MakeRouter(
+		rest.Get("/list", methods.ListTvShows),
+		rest.Get("/search", methods.Search),
+		rest.Post("/users", methods.CreateUser),
+		rest.Get("/users", methods.GetAllUsers),
+		rest.Get("/users/:userId", methods.GetUser),
+		rest.Delete("/users/:userId", methods.DeleteUser),
+	)
+	if err != nil {
+		fmt.Println(err)
 	}
-	return request, nil
-}
-func decodeListRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	return listEpisodesRequest{S: string(r.URL.Query().Get("showId"))}, nil
-}
-func decodeSearchRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	return searchRequest{S: string(r.URL.Query().Get("query"))}, nil
+	api.SetApp(router)
+	http.ListenAndServe(":8080", api.MakeHandler())
 }
 
-func encodeResponse(_ context.Context, w http.ResponseWriter, response interface{}) error {
-	return json.NewEncoder(w).Encode(response)
-}
+
