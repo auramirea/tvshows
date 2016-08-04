@@ -99,6 +99,18 @@ func main() {
 	methods := Methods{}
 	api := rest.NewApi()
 	api.Use(rest.DefaultDevStack...)
+	api.Use(&rest.CorsMiddleware{
+		RejectNonCorsRequests: false,
+		OriginValidator: func(origin string, request *rest.Request) bool {
+			return origin == "http://localhost:8000"
+		},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
+		AllowedHeaders: []string{
+			"Accept", "Content-Type", "X-Custom-Header", "Origin", "Accept-Language",
+			"Accept-Encoding", "X-Requested-With"},
+		AccessControlAllowCredentials: true,
+		AccessControlMaxAge:           3600,
+	})
 	router, err := rest.MakeRouter(
 		rest.Get("/list", methods.ListTvShows),
 		rest.Get("/search", methods.Search),
