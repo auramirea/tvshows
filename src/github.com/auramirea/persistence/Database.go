@@ -64,12 +64,13 @@ func (*userRepository) DeleteUser(userId string) {
 	}
 }
 
-func (*userRepository) FindUser(userId string) UserEntity {
+func (*userRepository) FindUser(userId string) *UserEntity {
 	user := UserEntity{}
 	if db.First(&user, userId).Error != nil {
 		log.Println("Couldn't find user with id", userId)
+		return nil
 	}
-	return user
+	return &user
 }
 
 

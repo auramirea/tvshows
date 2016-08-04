@@ -2,15 +2,16 @@ package main
 
 import (
 	"net/http"
-	s "github.com/auramirea/service"
 	"github.com/ant0ine/go-json-rest/rest"
 	"fmt"
 	"strconv"
-	"github.com/auramirea/persistence"
+	p "github.com/auramirea/persistence"
+	"github.com/auramirea/service"
 )
 
-var c = s.NewClient(nil)
-var tvs = s.NewTvService(c)
+var c = service.NewClient(nil)
+var tvs = service.NewTvService(c)
+var db = p.GetUserRepository()
 
 type Methods struct {}
 
@@ -34,19 +35,19 @@ func (api *Methods) Search(w rest.ResponseWriter, r *rest.Request) {
 		rest.Error(w, "'q' query parameter required", 400)
 		return
 	}
-	params := &s.SearchParams{query}
+	params := &service.SearchParams{query}
 	result := tvs.Search(params)
 	w.WriteJson(result)
 }
 
 func (api *Methods) CreateUser(w rest.ResponseWriter, r *rest.Request) {
-	user := s.User{}
+	user := p.UserEntity{}
 	err := r.DecodeJsonPayload(&user)
 	if err != nil {
 		rest.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.WriteJson(s.GetUserService().CreateUser(user))
+	w.WriteJson(db.CreateUser(user))
 }
 
 func (api *Methods) DeleteUser(w rest.ResponseWriter, r *rest.Request) {
@@ -55,12 +56,12 @@ func (api *Methods) DeleteUser(w rest.ResponseWriter, r *rest.Request) {
 		rest.Error(w, "'userId' cannot be empty", http.StatusBadRequest)
 		return
 	}
-	s.GetUserService().DeleteUser(userId)
+	db.DeleteUser(userId)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (api *Methods) GetAllUsers(w rest.ResponseWriter, r *rest.Request) {
-	w.WriteJson(s.GetUserService().FindAllUsers())
+	w.WriteJson(db.FindAllUsers())
 }
 
 func (api *Methods) GetUser(w rest.ResponseWriter, r *rest.Request) {
@@ -69,12 +70,17 @@ func (api *Methods) GetUser(w rest.ResponseWriter, r *rest.Request) {
 		rest.Error(w, "'userId' cannot be empty", http.StatusBadRequest)
 		return
 	}
-	w.WriteJson(s.GetUserService().FindUser(userId))
+	user := db.FindUser(userId)
+	if user == nil {
+		rest.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+	w.WriteJson(user)
 }
 
 
 func main() {
-	dbMigration := persistence.DbMigration{}
+	dbMigration := p.DbMigration{}
 	//dbMigration.MigrationsDown()
 	dbMigration.MigrationsUp()
 	methods := Methods{}
