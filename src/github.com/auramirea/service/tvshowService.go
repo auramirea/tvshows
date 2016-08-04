@@ -9,7 +9,8 @@ const baseURL = "http://api.tvmaze.com/"
 
 type tvServiceInterface interface {
 	ListEpisodes(string) []Episode
-	Search(*SearchParams) SearchResult
+	Search(*SearchParams) Show
+	GetShow(string) *Show
 }
 
 
@@ -26,7 +27,7 @@ type Episode struct {
 type SearchParams struct {
 	Query string `url:"q,omitempty"`
 }
-type SearchResult struct {
+type Show struct {
 	Id       int    `json:"id"`
 	Url      string `json:"url"`
 	Status   string `json:"status"`
@@ -55,12 +56,17 @@ func (s *TvService) ListEpisodes(showId string) ([]Episode) {
 	return *result
 }
 // List returns the authenticated user's issues across repos and orgs.
-func (s *TvService) Search(params *SearchParams) (SearchResult) {
-	var result SearchResult
+func (s *TvService) Search(params *SearchParams) (Show) {
+	var result Show
 	s.client.ShowsService.sling.New().Get("/singlesearch/shows").QueryStruct(params).ReceiveSuccess(&result)
 	return result
 }
 
+func (s *TvService) GetShow(showId string) *Show {
+	result := Show{}
+	s.client.ShowsService.sling.New().Get("/shows/" + showId).ReceiveSuccess(&result)
+	return &result
+}
 
 func NewShowsService(httpClient *http.Client) *ShowsService {
 	return &ShowsService{
