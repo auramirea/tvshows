@@ -92,6 +92,25 @@ func (*Methods) DeleteShow(w rest.ResponseWriter, r *rest.Request) {
 	w.WriteJson(user)
 }
 
+func (*Methods) GetAllShows(w rest.ResponseWriter, r *rest.Request) {
+	genre := r.URL.Query().Get("genre")
+	alphabet := r.URL.Query().Get("alphabet")
+	result := tvs.GetAllShows()
+	if (genre != "") {
+		result = tvs.FilterByGenre(genre, result)
+	}
+	if (alphabet != "") {
+		result = tvs.FilterByAlphabet(alphabet, result)
+	}
+	w.WriteJson(result)
+}
+
+func (*Methods) GetShow(w rest.ResponseWriter, r *rest.Request) {
+	showId := r.PathParam("showId")
+	result := tvs.GetShow(showId)
+	w.WriteJson(result)
+}
+
 func main() {
 	//dbMigration := p.DbMigration{}
 	//dbMigration.MigrationsDown()
@@ -112,6 +131,8 @@ func main() {
 		AccessControlMaxAge:           3600,
 	})
 	router, err := rest.MakeRouter(
+		rest.Get("/shows", methods.GetAllShows),
+		rest.Get("/shows/:showId", methods.GetShow),
 		rest.Get("/list", methods.ListTvShows),
 		rest.Get("/search", methods.Search),
 		rest.Post("/users", methods.CreateUser),
