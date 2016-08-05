@@ -1,22 +1,25 @@
 package main
 
 import (
-	"net/http"
-	"github.com/ant0ine/go-json-rest/rest"
 	"fmt"
-	"strconv"
+	"github.com/StephanDollberg/go-json-rest-middleware-jwt"
+	"github.com/ant0ine/go-json-rest/rest"
 	p "github.com/auramirea/persistence"
 	"github.com/auramirea/service"
+	"golang.org/x/crypto/bcrypt"
+	"net/http"
+	"strconv"
+	"time"
 )
 
 var tvs = service.NewTvService()
 var db = p.GetUserRepository()
 
-type Methods struct {}
+type Methods struct{}
 
 func (*Methods) ListTvShows(w rest.ResponseWriter, r *rest.Request) {
 	showId := r.URL.Query().Get("showId")
-	if showId == ""{
+	if showId == "" {
 		rest.Error(w, "'showId' query parameter required", 400)
 		return
 	}
@@ -46,6 +49,8 @@ func (*Methods) CreateUser(w rest.ResponseWriter, r *rest.Request) {
 		rest.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	user.Password = string(hashedPassword)
 	w.WriteJson(db.CreateUser(user))
 }
 
@@ -96,10 +101,10 @@ func (*Methods) GetAllShows(w rest.ResponseWriter, r *rest.Request) {
 	alphabet := r.URL.Query().Get("alphabet")
 	page := r.URL.Query().Get("page")
 	result := tvs.GetAllShows(page)
-	if (genre != "") {
+	if genre != "" {
 		result = tvs.FilterByGenre(genre, result)
 	}
-	if (alphabet != "") {
+	if alphabet != "" {
 		result = tvs.FilterByAlphabet(alphabet, result)
 	}
 	w.WriteJson(result)
@@ -123,12 +128,37 @@ func main() {
 		OriginValidator: func(origin string, request *rest.Request) bool {
 			return origin == "http://localhost:8000"
 		},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders: []string{
 			"Accept", "Content-Type", "X-Custom-Header", "Origin", "Accept-Language",
-			"Accept-Encoding", "X-Requested-With"},
+			"Accept-Encoding", "X-Requested-With", "Authorization"},
 		AccessControlAllowCredentials: true,
 		AccessControlMaxAge:           3600,
+	})
+	jwt_middleware := &jwt.JWTMiddleware{
+		Key:        []byte("secret key"),
+		Realm:      "jwt auth",
+		Timeout:    time.Hour,
+		MaxRefresh: time.Hour * 24,
+		PayloadFunc: func(userId string) map[string]interface{} {
+			user := db.FindUserByEmail(userId)
+			// Set custom claim, to be checked in Authorizator method
+			return map[string]interface{}{"user": user}
+		},
+		Authenticator: func(email string, password string) bool {
+			user := db.FindUserByEmail(email)
+			fmt.Println("Logged in user", user)
+			if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
+				return false
+			}
+			return true
+		}}
+
+	api.Use(&rest.IfMiddleware{
+		Condition: func(request *rest.Request) bool {
+			return request.URL.Path != "/login" && request.URL.Path != "/users"
+		},
+		IfTrue: jwt_middleware,
 	})
 	router, err := rest.MakeRouter(
 		rest.Get("/shows", methods.GetAllShows),
@@ -141,6 +171,8 @@ func main() {
 		rest.Delete("/users/:userId", methods.DeleteUser),
 		rest.Put("/users/:userId/shows/:showId", methods.AddShow),
 		rest.Delete("/users/:userId/shows/:showId", methods.DeleteShow),
+		rest.Post("/login", jwt_middleware.LoginHandler),
+		rest.Get("/refresh_token", jwt_middleware.RefreshHandler),
 	)
 	if err != nil {
 		fmt.Println(err)
@@ -148,5 +180,3 @@ func main() {
 	api.SetApp(router)
 	http.ListenAndServe(":8080", api.MakeHandler())
 }
-
-

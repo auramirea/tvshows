@@ -1,10 +1,11 @@
 package persistence
 
 import (
-	"github.com/mattes/migrate/migrate"
 	"fmt"
 	_ "github.com/mattes/migrate/driver/postgres"
+	"github.com/mattes/migrate/migrate"
 )
+
 type DbMigration struct {
 }
 
@@ -25,4 +26,3 @@ func (dbMigration *DbMigration) MigrationsDown() {
 		fmt.Println("Down sync error ...", err, ok)
 	}
 }
-

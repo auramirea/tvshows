@@ -1,18 +1,21 @@
 package persistence
 
 import (
+	"github.com/auramirea/service"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
-	"sync"
 	"log"
+	"sync"
 	"time"
-	"github.com/auramirea/service"
 )
-type userRepository struct {}
+
+type userRepository struct{}
+
 var instance *userRepository
 var db *gorm.DB
 
 var once sync.Once
+
 func GetUserRepository() *userRepository {
 	once.Do(func() {
 		instance = &userRepository{}
@@ -22,21 +25,22 @@ func GetUserRepository() *userRepository {
 }
 
 type UserEntity struct {
-	ID        	uint `gorm:"primary_key"`
-	CreatedAt 	time.Time
-	UpdatedAt 	time.Time
-	FirstName       string  `gorm:"size:255"` // Default size for string is 255, reset it with this tag
-	LastName        string  `gorm:"size:255"` // Default size for string is 255, reset it with this tag
-	Email           string  `gorm:"size:255"`
-	Shows 		[]Show  `gorm:"ForeignKey:UserId"`
+	ID        uint `gorm:"primary_key"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Name      string `gorm:"size:255"` // Default size for string is 255, reset it with this tag
+	Email     string `gorm:"size:255"`
+	Password  string `gorm:"size:255"`
+	Shows     []Show `gorm:"ForeignKey:UserId"`
 }
 type Show struct {
-	CreatedAt 	time.Time
-	UpdatedAt 	time.Time
-	Name            string  `gorm:"size:255"` // Default size for string is 255, reset it with this tag
-	ExternalId      int `gorm:"primary_key"`
-	UserId          uint `gorm:"primary_key"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	Name       string `gorm:"size:255"` // Default size for string is 255, reset it with this tag
+	ExternalId int    `gorm:"primary_key"`
+	UserId     uint   `gorm:"primary_key"`
 }
+
 func (UserEntity) TableName() string {
 	return "appuser"
 }
@@ -44,7 +48,7 @@ func (Show) TableName() string {
 	return "show"
 }
 
-func openConnection() (*gorm.DB) {
+func openConnection() *gorm.DB {
 	db, err := gorm.Open("postgres", DB_URL)
 	if err != nil {
 		panic("failed to connect database")
@@ -82,12 +86,18 @@ func (*userRepository) FindUser(userId string) *UserEntity {
 	return &user
 }
 
+func (*userRepository) FindUserByEmail(email string) *UserEntity {
+	user := UserEntity{}
+	db.Where("email = ?", email).First(&user)
+	db.Model(&user).Association("Shows").Find(&user.Shows)
+	return &user
+}
 
 func (*userRepository) FindAllUsers() []UserEntity {
 	users := []UserEntity{}
 	result := []UserEntity{}
 	db.Find(&users)
-	for _, user:= range(users) {
+	for _, user := range users {
 		db.Model(&user).Association("Shows").Find(&user.Shows)
 		result = append(result, user)
 	}
@@ -118,4 +128,3 @@ func (u *userRepository) DeleteShow(userId string, showId string) *UserEntity {
 
 	return u.FindUser(userId)
 }
-
