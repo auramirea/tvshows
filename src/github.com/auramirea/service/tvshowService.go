@@ -1,20 +1,35 @@
 package service
 
 import (
-	"net/http"
 	"github.com/dghubble/sling"
 	"strings"
 	"fmt"
+	"github.com/auramirea/client"
+	"sync"
+	"encoding/json"
 )
 
 const baseURL = "http://api.tvmaze.com/"
 
-type tvServiceInterface interface {
-	ListEpisodes(string) []Episode
-	Search(*SearchParams) Show
-	GetShow(string) *Show
+var instance *TvService
+var once sync.Once
+
+const showsKey = "showCache"
+
+type TvService struct {
+	sling *sling.Sling
+	redisClient *client.RedisClient
 }
 
+func NewTvService() *TvService {
+	once.Do(func() {
+		instance = &TvService{
+			sling: sling.New().Client(nil).Base(baseURL),
+			redisClient: client.GetRedisClient(),
+		}
+	})
+	return instance
+}
 
 type Episode struct {
 	Id       int    `json:"id"`
@@ -63,32 +78,40 @@ type Image struct {
 	Original string `json:"original"`
 }
 
-// Services
-type ShowsService struct {
-	sling *sling.Sling
-}
-
 func (s *TvService) ListEpisodes(showId string) ([]Episode) {
 	result := new([]Episode)
-	s.client.ShowsService.sling.New().Get("/shows/" + showId + "/episodes").ReceiveSuccess(result)
+	s.sling.New().Get("/shows/" + showId + "/episodes").ReceiveSuccess(result)
 
 	return *result
 }
 // List returns the authenticated user's issues across repos and orgs.
 func (s *TvService) Search(params *SearchParams) (Show) {
 	var result Show
-	s.client.ShowsService.sling.New().Get("/singlesearch/shows").QueryStruct(params).ReceiveSuccess(&result)
+	s.sling.New().Get("/singlesearch/shows").QueryStruct(params).ReceiveSuccess(&result)
 	return result
 }
 
 func (s *TvService) GetShow(showId string) *Show {
 	result := Show{}
-	s.client.ShowsService.sling.New().Get("/shows/" + showId + "?embed=episodes").ReceiveSuccess(&result)
+	s.sling.New().Get("/shows/" + showId + "?embed=episodes").ReceiveSuccess(&result)
 	return &result
 }
-func (s *TvService) GetAllShows() []Show {
+
+func (s *TvService) GetAllShows(page string) []Show {
 	result := []Show{}
-	s.client.ShowsService.sling.New().Get("/shows").ReceiveSuccess(&result)
+	path := "/shows"
+	if page != "" {
+		path += "?page=" + page
+	}
+	cachedShows := s.redisClient.GetKey(showsKey + page)
+	if cachedShows != "" {
+		json.Unmarshal([]byte(cachedShows), &result)
+		fmt.Println("Unmarshalled cached result")
+		return result
+	}
+	s.sling.New().Get(path).ReceiveSuccess(&result)
+	val, _ := json.Marshal(result)
+	s.redisClient.SetKey(showsKey, string(val))
 	return result
 }
 
@@ -105,6 +128,7 @@ func (s *TvService) FilterByGenre(filter string, shows []Show) []Show {
 	}
 	return filteredResult
 }
+
 func (s *TvService) FilterByAlphabet(alphabet string, shows []Show) []Show {
 	filteredResult := []Show{}
 	for _, show := range(shows) {
@@ -115,27 +139,4 @@ func (s *TvService) FilterByAlphabet(alphabet string, shows []Show) []Show {
 	return filteredResult
 }
 
-func NewShowsService(httpClient *http.Client) *ShowsService {
-	return &ShowsService{
-		sling: sling.New().Client(httpClient).Base(baseURL),
-	}
-}
 
-type TvService struct {
-	client *Client
-}
-
-// Client to wrap services
-type Client struct {
-	ShowsService *ShowsService
-}
-
-// NewClient returns a new Client
-func NewClient(httpClient *http.Client) *Client {
-	return &Client{
-		ShowsService: NewShowsService(httpClient),
-	}
-}
-func NewTvService(c *Client) *TvService {
-	return &TvService{client: c}
-}

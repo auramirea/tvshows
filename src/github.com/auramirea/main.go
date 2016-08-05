@@ -9,8 +9,7 @@ import (
 	"github.com/auramirea/service"
 )
 
-var c = service.NewClient(nil)
-var tvs = service.NewTvService(c)
+var tvs = service.NewTvService()
 var db = p.GetUserRepository()
 
 type Methods struct {}
@@ -95,7 +94,8 @@ func (*Methods) DeleteShow(w rest.ResponseWriter, r *rest.Request) {
 func (*Methods) GetAllShows(w rest.ResponseWriter, r *rest.Request) {
 	genre := r.URL.Query().Get("genre")
 	alphabet := r.URL.Query().Get("alphabet")
-	result := tvs.GetAllShows()
+	page := r.URL.Query().Get("page")
+	result := tvs.GetAllShows(page)
 	if (genre != "") {
 		result = tvs.FilterByGenre(genre, result)
 	}
