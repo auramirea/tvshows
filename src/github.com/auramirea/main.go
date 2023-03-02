@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"github.com/StephanDollberg/go-json-rest-middleware-jwt"
 	"github.com/ant0ine/go-json-rest/rest"
-	p "github.com/auramirea/persistence"
+	"github.com/auramirea/persistence"
 	"github.com/auramirea/service"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"strconv"
+	"github.com/google/go-github/github"
 	"time"
 )
 
